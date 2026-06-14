@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>台指期當沖訓練 — 1分K 回放</title>
+  <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; font-family: "Segoe UI", "Microsoft JhengHei", sans-serif;
+           background: #131722; color: #d1d4dc; }
+    #toolbar { display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+               background: #1e222d; border-bottom: 1px solid #2a2e39; flex-wrap: wrap; }
+    button, select { background: #2a2e39; color: #d1d4dc; border: 1px solid #3a3f4b;
+            border-radius: 4px; padding: 6px 12px; cursor: pointer; font-size: 14px; }
+    button:hover { background: #363c4a; }
+    button:disabled { opacity: .4; cursor: default; }
+    label { font-size: 13px; color: #868993; }
+    #status { margin-left: auto; font-size: 13px; color: #868993; }
+    #chart { width: 100vw; height: calc(100vh - 53px); }
+    .speed-val { min-width: 64px; display: inline-block; text-align: center; font-weight: 600; }
+    .speed-btn { min-width: 38px; font-weight: bold; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <label>交易日</label>
+    <select id="dateSel"></select>
+    <button id="playBtn">▶ 播放</button>
+    <button id="stepBtn">⏭ 單步</button>
+    <label>速度</label>
+    <button id="speedDown" class="speed-btn" title="放慢">－</button>
+    <span class="speed-val" id="speedVal">1x 真實</span>
+    <button id="speedUp" class="speed-btn" title="加快">＋</button>
+    <button id="realBtn" title="1x：依當天真實節奏播放">🕒 真實速度</button>
+    <span id="status">尚未連線</span>
+  </div>
+  <div id="chart"></div>
+  <script src="main.js"></script>
+</body>
+</html>
