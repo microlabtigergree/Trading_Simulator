@@ -18,7 +18,10 @@
     button:disabled { opacity: .4; cursor: default; }
     label { font-size: 13px; color: #868993; }
     #status { margin-left: auto; font-size: 13px; color: #868993; }
-    #chart { flex: 1; width: 100%; }
+
+    #main { flex: 1; display: flex; min-height: 0; }
+    #chart { flex: 1; min-width: 0; }
+
     .speed-val { min-width: 64px; display: inline-block; text-align: center; font-weight: 600; }
     .speed-btn { min-width: 38px; font-weight: bold; font-size: 16px; }
 
@@ -27,11 +30,39 @@
     #buyBtn:hover  { background: #7a282d; }
     #sellBtn { background: #14463f; border-color: #26a69a; }
     #sellBtn:hover { background: #1c5e54; }
-    #flatBtn { background: #3a3f4b; }
     .pnl-item { font-size: 13px; color: #868993; }
     .pnl-item b { color: #d1d4dc; font-size: 15px; margin-left: 4px; font-variant-numeric: tabular-nums; }
     .up   { color: #ef5350 !important; }   /* 獲利＝紅（台股慣例） */
     .down { color: #26a69a !important; }   /* 虧損＝綠 */
+
+    /* 交易明細側欄 */
+    #tradeLog { width: 340px; overflow-y: auto; background: #1b1f2a;
+                border-left: 1px solid #2a2e39; display: none; }
+    #tradeLog.show { display: block; }
+    #tradeLog table { width: 100%; border-collapse: collapse; font-size: 12px;
+                font-variant-numeric: tabular-nums; }
+    #tradeLog th, #tradeLog td { padding: 4px 8px; text-align: right;
+                border-bottom: 1px solid #2a2e3988; }
+    #tradeLog th { color: #868993; font-weight: normal; position: sticky; top: 0;
+                background: #1b1f2a; }
+    #tradeLog td.act-b { color: #ef5350; }
+    #tradeLog td.act-s { color: #26a69a; }
+    #logEmpty { padding: 16px; color: #868993; font-size: 13px; text-align: center; }
+
+    /* 歷史成績 modal */
+    .modal { position: fixed; inset: 0; background: #000000aa; z-index: 10;
+             display: flex; align-items: center; justify-content: center; }
+    .modal-box { background: #1b1f2a; border: 1px solid #2a2e39; border-radius: 8px;
+                 width: min(880px, 92vw); max-height: 84vh; overflow: auto; padding: 16px 20px; }
+    .modal-head { display: flex; align-items: center; justify-content: space-between;
+                  margin-bottom: 12px; font-size: 16px; }
+    #histSummary { font-size: 14px; margin-bottom: 12px; line-height: 1.8; }
+    #histSummary b { font-variant-numeric: tabular-nums; }
+    #histTable { width: 100%; border-collapse: collapse; font-size: 13px;
+                 font-variant-numeric: tabular-nums; }
+    #histTable th, #histTable td { padding: 6px 10px; text-align: right;
+                 border-bottom: 1px solid #2a2e3988; }
+    #histTable th { color: #868993; font-weight: normal; }
   </style>
 </head>
 <body>
@@ -60,7 +91,54 @@
     <span id="ptNote" class="pnl-item" style="margin-left:auto;"></span>
   </div>
 
-  <div id="chart"></div>
+  <div class="bar" id="statsbar">
+    <span class="pnl-item">交易次數<b id="nTrades">0</b></span>
+    <span class="pnl-item">勝率<b id="winRate">—</b></span>
+    <span class="pnl-item">獲利次數<b id="nWin">0</b></span>
+    <span class="pnl-item">虧損次數<b id="nLoss">0</b></span>
+    <span class="pnl-item">平均獲利<b id="avgWin">0</b></span>
+    <span class="pnl-item">平均虧損<b id="avgLoss">0</b></span>
+    <span class="pnl-item">獲利因子<b id="profitFactor">—</b></span>
+    <span class="pnl-item">最大回撤<b id="maxDD">0</b></span>
+    <span class="pnl-item">最大連虧<b id="maxConsec">0</b></span>
+    <button id="saveBtn" style="margin-left:auto;">💾 存檔成績</button>
+    <button id="historyBtn">📊 歷史成績</button>
+    <button id="logToggle">交易明細 ▼</button>
+  </div>
+
+  <div id="main">
+    <div id="chart"></div>
+    <div id="tradeLog">
+      <div id="logEmpty">尚無成交紀錄</div>
+      <table id="logTable" style="display:none;">
+        <thead>
+          <tr><th>#</th><th>時間</th><th>動作</th><th>價格</th><th>口數</th><th>損益</th></tr>
+        </thead>
+        <tbody id="logBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="historyModal" class="modal" style="display:none;">
+    <div class="modal-box">
+      <div class="modal-head">
+        <b>📊 歷史練習成績</b>
+        <button id="histClose">✕</button>
+      </div>
+      <div id="histSummary"></div>
+      <table id="histTable">
+        <thead>
+          <tr><th>存檔時間</th><th>交易日</th><th>商品</th><th>筆數</th><th>勝率</th>
+              <th>總損益</th><th>最大回撤</th><th>最大連虧</th></tr>
+        </thead>
+        <tbody id="histBody"></tbody>
+      </table>
+      <div id="histEmpty" style="display:none; padding:24px; text-align:center; color:#868993;">
+        尚無存檔紀錄
+      </div>
+    </div>
+  </div>
+
   <script src="main.js"></script>
 </body>
 </html>

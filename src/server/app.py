@@ -24,6 +24,7 @@ from fastapi.staticfiles import StaticFiles
 
 from src.config import BARS_DIR, ROOT
 from src.replay.engine import ReplayEngine
+from src.server import sessions
 
 app = FastAPI(title="台指期當沖訓練 — 回放引擎")
 
@@ -39,6 +40,19 @@ def list_dates() -> list[dict]:
         if m:
             out.append({"product": m["product"], "date": m["date"]})
     return out
+
+
+@app.get("/api/sessions")
+def get_sessions() -> list[dict]:
+    """回傳所有已存檔的練習成績。"""
+    return sessions.load_sessions()
+
+
+@app.post("/api/session")
+async def save_session(rec: dict) -> dict:
+    """存檔一場練習成績。"""
+    sessions.append_session(rec)
+    return {"ok": True, "count": len(sessions.load_sessions())}
 
 
 def _ticks_path(product: str, date: str) -> Path:
