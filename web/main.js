@@ -70,6 +70,8 @@ let ws = null;
 let playing = false;
 let received = 0;
 let total = 0;
+let endedNormally = false;   // 是否為正常播完（非意外斷線）
+let pendingPlay = false;     // 重新連線後是否自動播放
 
 function setStatus(t) { statusEl.textContent = t; }
 
@@ -109,7 +111,7 @@ function startReplay(product, date) {
   if (ws) ws.close();
   candleSeries.setData([]);
   volumeSeries.setData([]);
-  received = 0; total = 0; playing = false; curBar = null;
+  received = 0; total = 0; playing = false; curBar = null; endedNormally = false;
   playBtn.textContent = "▶ 播放";
 
   pointValue = POINT_VALUE[product] || 200;
@@ -122,8 +124,13 @@ function startReplay(product, date) {
   ws.onopen = () => {
     setStatus("已連線，按播放開始");
     send({ cmd: "speed", value: SPEEDS[speedIdx] });   // 同步初始速度給後端
+    if (pendingPlay) {
+      pendingPlay = false;
+      playing = true; playBtn.textContent = "⏸ 暫停";
+      send({ cmd: "play" });
+    }
   };
-  ws.onclose = () => setStatus("連線關閉");
+  ws.onclose = () => { if (!endedNormally) setStatus("連線關閉"); };
   ws.onerror = () => setStatus("連線錯誤");
   ws.onmessage = (ev) => {
     const m = JSON.parse(ev.data);
@@ -138,7 +145,8 @@ function startReplay(product, date) {
         setStatus(`${received.toLocaleString()} / ${total.toLocaleString()} 筆　現價 ${px}`);
       }
     } else if (m.type === "end") {
-      setStatus(`回放結束（${received.toLocaleString()} 筆 tick）`);
+      endedNormally = true;
+      setStatus(`回放結束（${received.toLocaleString()} 筆 tick）— 按播放可重看本日`);
       playing = false; playBtn.textContent = "▶ 播放";
     } else if (m.type === "error") {
       setStatus("錯誤：" + m.msg);
@@ -148,6 +156,11 @@ function startReplay(product, date) {
 
 // ---- 控制 ----
 playBtn.onclick = () => {
+  // 連線已結束（播完）→ 重新連線並自動從頭播放本日
+  if (!ws || ws.readyState > WebSocket.OPEN) {
+    if (curProduct && curDate) { pendingPlay = true; startReplay(curProduct, curDate); }
+    return;
+  }
   playing = !playing;
   send({ cmd: playing ? "play" : "pause" });
   playBtn.textContent = playing ? "⏸ 暫停" : "▶ 播放";
