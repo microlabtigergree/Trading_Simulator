@@ -18,6 +18,12 @@ def append_session(rec: dict, path: Path | None = None) -> None:
         f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
 
+def clear_sessions(path: Path | None = None) -> None:
+    p = Path(path or SESSIONS_FILE)
+    if p.exists():
+        p.unlink()
+
+
 def load_sessions(path: Path | None = None) -> list[dict]:
     p = Path(path or SESSIONS_FILE)
     if not p.exists():

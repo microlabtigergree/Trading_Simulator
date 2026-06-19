@@ -55,6 +55,13 @@ async def save_session(rec: dict) -> dict:
     return {"ok": True, "count": len(sessions.load_sessions())}
 
 
+@app.delete("/api/sessions")
+def clear_sessions() -> dict:
+    """清除所有歷史練習成績。"""
+    sessions.clear_sessions()
+    return {"ok": True}
+
+
 def _ticks_path(product: str, date: str) -> Path:
     return BARS_DIR / f"{product}_{date}_ticks.parquet"
 

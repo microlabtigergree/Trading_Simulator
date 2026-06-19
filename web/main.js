@@ -24,6 +24,7 @@ window.addEventListener("resize", () => {
 });
 
 // ---- DOM ----
+const productSel = document.getElementById("productSel");
 const dateSel = document.getElementById("dateSel");
 const playBtn = document.getElementById("playBtn");
 const stepBtn = document.getElementById("stepBtn");
@@ -58,6 +59,7 @@ const logEmpty = document.getElementById("logEmpty");
 const saveBtn = document.getElementById("saveBtn");
 const historyBtn = document.getElementById("historyBtn");
 const histClose = document.getElementById("histClose");
+const histClear = document.getElementById("histClear");
 const historyModal = document.getElementById("historyModal");
 const histSummary = document.getElementById("histSummary");
 const histTable = document.getElementById("histTable");
@@ -358,6 +360,14 @@ historyBtn.onclick = async () => {
   historyModal.style.display = "flex";
 };
 
+histClear.onclick = async () => {
+  if (!confirm("確定清除所有歷史練習成績？此動作無法復原。")) return;
+  try { await fetch("/api/sessions", { method: "DELETE" }); }
+  catch (e) { setStatus("清除失敗：" + e); return; }
+  await historyBtn.onclick();   // 重新載入（顯示為空）
+  setStatus("已清除歷史成績");
+};
+
 histClose.onclick = () => { historyModal.style.display = "none"; };
 historyModal.onclick = (e) => { if (e.target === historyModal) historyModal.style.display = "none"; };
 
@@ -402,21 +412,42 @@ document.addEventListener("keydown", (e) => {
   else if (e.code === "Space") { e.preventDefault(); playBtn.click(); }
 });
 
-dateSel.onchange = () => {
-  const [product, date] = dateSel.value.split("|");
-  startReplay(product, date);
+// ---- 商品 / 日期 兩段式選擇 ----
+const PRODUCT_LABEL = { TX: "TX 大台", MTX: "MTX 小台", TMF: "TMF 微台" };
+const PRODUCT_ORDER = ["TX", "MTX", "TMF"];
+let datesByProduct = {};
+
+function populateDates(product) {
+  dateSel.innerHTML = "";
+  const dates = (datesByProduct[product] || []).slice().sort().reverse();  // 新到舊
+  for (const d of dates) {
+    const opt = document.createElement("option");
+    opt.value = d; opt.textContent = d;
+    dateSel.appendChild(opt);
+  }
+}
+
+productSel.onchange = () => {
+  populateDates(productSel.value);
+  startReplay(productSel.value, dateSel.value);
 };
+dateSel.onchange = () => startReplay(productSel.value, dateSel.value);
 
 // ---- 初始化：載入可回放交易日 ----
 fetch("/api/dates").then(r => r.json()).then(list => {
   if (!list.length) { setStatus("data/bars 尚無資料，請先跑 build_bars"); return; }
-  dateSel.innerHTML = "";
-  for (const d of list) {
+  datesByProduct = {};
+  for (const d of list) (datesByProduct[d.product] ||= []).push(d.date);
+
+  productSel.innerHTML = "";
+  const products = PRODUCT_ORDER.filter(p => datesByProduct[p])
+    .concat(Object.keys(datesByProduct).filter(p => !PRODUCT_ORDER.includes(p)));
+  for (const p of products) {
     const opt = document.createElement("option");
-    opt.value = `${d.product}|${d.date}`;
-    opt.textContent = `${d.product}　${d.date}`;
-    dateSel.appendChild(opt);
+    opt.value = p; opt.textContent = PRODUCT_LABEL[p] || p;
+    productSel.appendChild(opt);
   }
-  const [product, date] = dateSel.value.split("|");
-  startReplay(product, date);
+
+  populateDates(productSel.value);
+  startReplay(productSel.value, dateSel.value);
 });

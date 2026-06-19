@@ -14,3 +14,13 @@ def test_append_and_load(tmp_path):
     assert len(recs) == 2
     assert recs[0]["replay_date"] == "2026-06-12"
     assert recs[1]["total"] == -800
+
+
+def test_clear(tmp_path):
+    f = tmp_path / "sessions.jsonl"
+    sessions.append_session({"total": 100}, path=f)
+    assert len(sessions.load_sessions(f)) == 1
+
+    sessions.clear_sessions(f)
+    assert sessions.load_sessions(f) == []
+    sessions.clear_sessions(f)            # 再清一次不報錯（檔案不存在）

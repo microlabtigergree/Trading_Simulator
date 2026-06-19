@@ -67,7 +67,9 @@
 </head>
 <body>
   <div class="bar" id="toolbar">
-    <label>交易日</label>
+    <label>商品</label>
+    <select id="productSel"></select>
+    <label>日期</label>
     <select id="dateSel"></select>
     <button id="playBtn">▶ 播放</button>
     <button id="stepBtn">⏭ 單步</button>
@@ -123,7 +125,10 @@
     <div class="modal-box">
       <div class="modal-head">
         <b>📊 歷史練習成績</b>
-        <button id="histClose">✕</button>
+        <span style="display:flex; gap:8px;">
+          <button id="histClear">🗑 清除歷史</button>
+          <button id="histClose">✕</button>
+        </span>
       </div>
       <div id="histSummary"></div>
       <table id="histTable">
