@@ -165,7 +165,7 @@ speedDown.onclick = () => { if (speedIdx > 0) { speedIdx--; applySpeed(); } };
 speedUp.onclick = () => { if (speedIdx < SPEEDS.length - 1) { speedIdx++; applySpeed(); } };
 realBtn.onclick = () => { speedIdx = 0; applySpeed(); };   // 一鍵切真實時間
 // ---- 模擬下單 / 損益 ----
-const POINT_VALUE = { TX: 200, MTX: 50 };   // 每點新台幣 / 口（大台 200、小台 50）
+const POINT_VALUE = { TX: 200, MTX: 50, TMF: 10 };   // 每點新台幣 / 口（大台 200、小台 50、微台 10）
 let pointValue = 200;
 let lastPrice = null;
 let lastTime = null;
