@@ -122,15 +122,16 @@ def clean_ticks(date: dt.date, product: str = DEFAULT_PRODUCT) -> pd.DataFrame:
     return ticks.sort_values("time", kind="stable").reset_index(drop=True)
 
 
-def build_bars(date: dt.date, product: str = DEFAULT_PRODUCT) -> pd.DataFrame:
-    """回傳當日 1 分 K DataFrame（含 time/open/high/low/close/volume）。"""
-    ticks = clean_ticks(date, product)
+def aggregate_1m(ticks: pd.DataFrame) -> pd.DataFrame:
+    """把逐筆 DataFrame（time epoch秒, price, volume）聚合成 1 分 K。
 
-    # 以分鐘 floor 分組聚合
-    ticks["minute"] = (ticks["time"] // 60) * 60
-    grouped = ticks.groupby("minute")
+    可被期交所與券商 API 兩種來源共用。
+    """
+    t = ticks.copy()
+    t["minute"] = (t["time"] // 60) * 60   # 分鐘 floor，即該根 K 的 epoch 秒
+    grouped = t.groupby("minute")
     bars = pd.DataFrame({
-        "time": grouped["time"].first().index,  # minute 即 epoch 秒
+        "time": grouped["time"].first().index,
         "open": grouped["price"].first().values,
         "high": grouped["price"].max().values,
         "low": grouped["price"].min().values,
@@ -138,6 +139,11 @@ def build_bars(date: dt.date, product: str = DEFAULT_PRODUCT) -> pd.DataFrame:
         "volume": grouped["volume"].sum().round().astype("int64").values,
     })
     return bars.sort_values("time").reset_index(drop=True)
+
+
+def build_bars(date: dt.date, product: str = DEFAULT_PRODUCT) -> pd.DataFrame:
+    """回傳當日 1 分 K DataFrame（含 time/open/high/low/close/volume）。"""
+    return aggregate_1m(clean_ticks(date, product))
 
 
 def bars_path(date: dt.date, product: str) -> Path:

@@ -76,6 +76,24 @@ python -m venv .venv
 
 工作目錄設為專案根目錄 `c:\TRADING_SIMULATOR`。
 
+### 用永豐 Shioaji 回補更長歷史（選用）
+
+期交所免費版只有近 30 個交易日；要回補更久的歷史可用 `shioaji_loader.py`
+（需永豐證券帳戶 + 開通行情 API，`pip install shioaji`）。下載行情只需金鑰登入，
+不需 CA 憑證或下單測試。
+
+```powershell
+# 先做連線/權限自我檢查
+.\.venv\Scripts\python.exe -m src.data_pipeline.shioaji_loader --check --date 2026-06-12 `
+    --api-key <KEY> --secret-key <SECRET>
+
+# 回補日期區間（輸出與期交所相同的 TX_YYYY-MM-DD_ticks.parquet）
+.\.venv\Scripts\python.exe -m src.data_pipeline.shioaji_loader --start 2026-01-01 --end 2026-03-31
+```
+
+金鑰也可放環境變數 `SHIOAJI_API_KEY` / `SHIOAJI_SECRET_KEY`。
+注意：Shioaji 期貨 tick 的量是單邊、**不 ÷2**（loader 已處理）。
+
 ## 重要實作細節
 
 - **tick 即時聚合**：後端串流逐筆 tick（節奏＝相鄰 tick 秒間隔 ÷ speed），

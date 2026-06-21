@@ -16,6 +16,7 @@ dev = [
     "pytest>=8.0",
     "httpx>=0.27",
 ]
+shioaji = ["shioaji>=1.2"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
