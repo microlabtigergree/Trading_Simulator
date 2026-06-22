@@ -44,7 +44,6 @@ const totVal = document.getElementById("totVal");
 const ptNote = document.getElementById("ptNote");
 const qtyInput = document.getElementById("qtyInput");
 const slInput = document.getElementById("slInput");
-const tpInput = document.getElementById("tpInput");
 const feeInput = document.getElementById("feeInput");
 const costVal = document.getElementById("costVal");
 const randomBtn = document.getElementById("randomBtn");
@@ -279,22 +278,14 @@ function trade(delta) {
 
 function flatten() { if (pos.qty !== 0) trade(-pos.qty); }
 
-// 觸價自動平倉（停損/停利以「距進場點數」設定）
+// 觸價自動平倉（直接輸入停損價）
 function checkAutoExit() {
   if (pos.qty === 0 || lastPrice == null) return;
-  const dir = Math.sign(pos.qty);
-  const sl = Number(slInput.value), tp = Number(tpInput.value);
-  if (sl > 0) {
-    const stop = pos.avg - dir * sl;
-    if ((dir > 0 && lastPrice <= stop) || (dir < 0 && lastPrice >= stop)) {
-      flatten(); setStatus("觸發停損，已平倉"); return;
-    }
-  }
-  if (tp > 0) {
-    const target = pos.avg + dir * tp;
-    if ((dir > 0 && lastPrice >= target) || (dir < 0 && lastPrice <= target)) {
-      flatten(); setStatus("觸發停利，已平倉");
-    }
+  const stop = Number(slInput.value);
+  if (!(stop > 0)) return;
+  const dir = Math.sign(pos.qty);   // 多單跌破停損價、空單漲破停損價 → 平倉
+  if ((dir > 0 && lastPrice <= stop) || (dir < 0 && lastPrice >= stop)) {
+    flatten(); setStatus("觸發停損，已平倉");
   }
 }
 
