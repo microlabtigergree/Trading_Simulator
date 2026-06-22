@@ -70,6 +70,12 @@ class ReplayEngine:
     def seek(self, index: int) -> None:
         self.cursor = max(0, min(index, self.total))
 
+    def seek_time(self, epoch_sec: int) -> None:
+        """跳到第一個 time >= epoch_sec 的事件（用於從盤中某時刻開始）。"""
+        idx = next((i for i, ev in enumerate(self._events)
+                    if ev["time"] >= epoch_sec), self.total)
+        self.cursor = idx
+
     # ---- 串流 ----
     async def stream(self) -> AsyncIterator[dict]:
         while self.cursor < self.total:

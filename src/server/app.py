@@ -16,9 +16,11 @@ WS
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 from pathlib import Path
 
+import pandas as pd
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 
@@ -62,6 +64,16 @@ def clear_sessions() -> dict:
     return {"ok": True}
 
 
+@app.get("/api/bars/{product}/{date}")
+def get_bars(product: str, date: str) -> list[dict]:
+    """回傳某交易日的 1 分 K（給「從此開始」載入前段歷史背景用）。"""
+    p = BARS_DIR / f"{product}_{date}_1m.parquet"
+    if not p.exists():
+        return []
+    df = pd.read_parquet(p)
+    return json.loads(df.to_json(orient="records"))
+
+
 def _ticks_path(product: str, date: str) -> Path:
     return BARS_DIR / f"{product}_{date}_ticks.parquet"
 
@@ -95,6 +107,8 @@ async def replay(ws: WebSocket, product: str, date: str) -> None:
                     engine.set_speed(float(msg.get("value", 60)))
                 elif cmd == "seek":
                     engine.seek(int(msg.get("index", 0)))
+                elif cmd == "seek_time":
+                    engine.seek_time(int(msg.get("time", 0)))
         except (WebSocketDisconnect, RuntimeError):
             pass
 

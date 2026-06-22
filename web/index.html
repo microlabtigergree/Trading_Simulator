@@ -14,6 +14,8 @@
            background: #1e222d; border-bottom: 1px solid #2a2e39; flex-wrap: wrap; }
     button, select { background: #2a2e39; color: #d1d4dc; border: 1px solid #3a3f4b;
             border-radius: 4px; padding: 6px 12px; cursor: pointer; font-size: 14px; }
+    input[type=number], input[type=time] { background: #2a2e39; color: #d1d4dc;
+            border: 1px solid #3a3f4b; border-radius: 4px; padding: 5px 8px; font-size: 14px; }
     button:hover { background: #363c4a; }
     button:disabled { opacity: .4; cursor: default; }
     label { font-size: 13px; color: #868993; }
@@ -71,6 +73,7 @@
     <select id="productSel"></select>
     <label>日期</label>
     <select id="dateSel"></select>
+    <span id="blindLabel" style="display:none;">🙈 ？？？</span>
     <button id="playBtn">▶ 播放</button>
     <button id="stepBtn">⏭ 單步</button>
     <label>速度</label>
@@ -78,17 +81,32 @@
     <span class="speed-val" id="speedVal">1x 真實</span>
     <button id="speedUp" class="speed-btn" title="加快">＋</button>
     <button id="realBtn" title="1x：依當天真實節奏播放">🕒 真實速度</button>
+    <span style="width:1px; height:24px; background:#3a3f4b;"></span>
+    <button id="randomBtn" title="隨機抽一天練習">🎲 隨機</button>
+    <label><input type="checkbox" id="blindChk" /> 盲測</label>
+    <label>起始</label>
+    <input id="startTime" type="time" value="08:45" step="60" />
+    <button id="startAtBtn" title="清空並從指定時間開始播放">⏱ 從此開始</button>
     <span id="status">尚未連線</span>
   </div>
 
   <div class="bar" id="tradebar">
-    <button id="buyBtn"  title="做多 1 口（鍵盤 B）">買進 ▲</button>
-    <button id="sellBtn" title="做空 1 口（鍵盤 S）">賣出 ▼</button>
+    <label>口數</label>
+    <input id="qtyInput" type="number" min="1" value="1" style="width:52px;" />
+    <button id="buyBtn"  title="做多（鍵盤 B）">買進 ▲</button>
+    <button id="sellBtn" title="做空（鍵盤 S）">賣出 ▼</button>
     <button id="flatBtn" title="平掉全部部位（鍵盤 F）">平倉</button>
+    <label title="距進場點數，觸價自動平倉">停損</label>
+    <input id="slInput" type="number" min="0" placeholder="點" style="width:60px;" />
+    <label title="距進場點數，觸價自動平倉">停利</label>
+    <input id="tpInput" type="number" min="0" placeholder="點" style="width:60px;" />
+    <label title="每口每邊手續費(元)">手續費</label>
+    <input id="feeInput" type="number" min="0" style="width:56px;" />
     <span class="pnl-item">現價<b id="pxVal">—</b></span>
     <span class="pnl-item">部位<b id="posVal">無</b></span>
     <span class="pnl-item">未實現<b id="uplVal">0</b></span>
     <span class="pnl-item">已實現<b id="rplVal">0</b></span>
+    <span class="pnl-item">費稅<b id="costVal">0</b></span>
     <span class="pnl-item">總損益<b id="totVal">0</b></span>
     <span id="ptNote" class="pnl-item" style="margin-left:auto;"></span>
   </div>

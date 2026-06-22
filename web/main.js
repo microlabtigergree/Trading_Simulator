@@ -42,6 +42,16 @@ const uplVal = document.getElementById("uplVal");
 const rplVal = document.getElementById("rplVal");
 const totVal = document.getElementById("totVal");
 const ptNote = document.getElementById("ptNote");
+const qtyInput = document.getElementById("qtyInput");
+const slInput = document.getElementById("slInput");
+const tpInput = document.getElementById("tpInput");
+const feeInput = document.getElementById("feeInput");
+const costVal = document.getElementById("costVal");
+const randomBtn = document.getElementById("randomBtn");
+const blindChk = document.getElementById("blindChk");
+const blindLabel = document.getElementById("blindLabel");
+const startTime = document.getElementById("startTime");
+const startAtBtn = document.getElementById("startAtBtn");
 const nTradesEl = document.getElementById("nTrades");
 const winRateEl = document.getElementById("winRate");
 const nWinEl = document.getElementById("nWin");
@@ -72,6 +82,9 @@ let received = 0;
 let total = 0;
 let endedNormally = false;   // 是否為正常播完（非意外斷線）
 let pendingPlay = false;     // 重新連線後是否自動播放
+let pendingSeekTime = null;  // 重新連線後跳到的起始 epoch 秒
+let historyBeforeEpoch = null; // 「從此開始」要先畫的前段歷史 K 截止 epoch
+let blind = false;           // 盲測：隱藏日期
 
 function setStatus(t) { statusEl.textContent = t; }
 
@@ -101,6 +114,7 @@ function applyTick(t) {
 
   lastPrice = t.price;
   lastTime = t.time;
+  checkAutoExit();
   refreshPnl();
 }
 
@@ -116,14 +130,23 @@ function startReplay(product, date) {
 
   pointValue = POINT_VALUE[product] || 200;
   ptNote.textContent = `${product}　每點 ${pointValue} 元 / 口`;
+  if (!feeInput.value) feeInput.value = FEE_DEFAULT[product] ?? 30;
   resetTrades();
 
   const proto = location.protocol === "https:" ? "wss" : "ws";
   ws = new WebSocket(`${proto}://${location.host}/ws/replay/${product}/${date}`);
 
-  ws.onopen = () => {
+  ws.onopen = async () => {
     setStatus("已連線，按播放開始");
     send({ cmd: "speed", value: SPEEDS[speedIdx] });   // 同步初始速度給後端
+    if (historyBeforeEpoch != null) {
+      await loadHistoryBefore(product, date, historyBeforeEpoch);  // 先畫前段歷史背景
+      historyBeforeEpoch = null;
+    }
+    if (pendingSeekTime != null) {
+      send({ cmd: "seek_time", time: pendingSeekTime });
+      pendingSeekTime = null;
+    }
     if (pendingPlay) {
       pendingPlay = false;
       playing = true; playBtn.textContent = "⏸ 暫停";
@@ -136,7 +159,7 @@ function startReplay(product, date) {
     const m = JSON.parse(ev.data);
     if (m.type === "meta") {
       total = m.total;
-      setStatus(`${m.date} ${m.product}　共 ${total.toLocaleString()} 筆 tick`);
+      setStatus(`${blind ? "？？？" : m.date} ${m.product}　共 ${total.toLocaleString()} 筆 tick`);
     } else if (m.type === "tick") {
       applyTick(m.data);
       received++;
@@ -181,52 +204,112 @@ speedUp.onclick = () => { if (speedIdx < SPEEDS.length - 1) { speedIdx++; applyS
 realBtn.onclick = () => { speedIdx = 0; applySpeed(); };   // 一鍵切真實時間
 // ---- 模擬下單 / 損益 ----
 const POINT_VALUE = { TX: 200, MTX: 50, TMF: 10 };   // 每點新台幣 / 口（大台 200、小台 50、微台 10）
+const FEE_DEFAULT = { TX: 30, MTX: 15, TMF: 5 };     // 預設每口每邊手續費(元)，可自行調整
+const TAX_RATE = 0.00002;                            // 股價類期貨交易稅率（每邊）
 let pointValue = 200;
 let lastPrice = null;
 let lastTime = null;
-let pos = { qty: 0, avg: 0 };   // qty>0 多單、<0 空單；avg 進場均價
-let realized = 0;               // 已實現損益（NT$）
+let pos = { qty: 0, avg: 0, openCostPerLot: 0 };   // qty>0 多單、<0 空單；avg 進場均價；每口開倉成本
+let realized = 0;               // 已實現損益（毛，NT$）
+let costs = 0;                  // 累計手續費＋交易稅
 let fills = [];                 // 每筆成交紀錄
+let markers = [];               // 圖上進出場標記
 
 function resetTrades() {
   lastPrice = null;
   lastTime = null;
-  pos = { qty: 0, avg: 0 };
+  pos = { qty: 0, avg: 0, openCostPerLot: 0 };
   realized = 0;
+  costs = 0;
   fills = [];
+  markers = [];
+  candleSeries.setMarkers([]);
   rebuildLog();
   refreshPnl();
   refreshStats();
+}
+
+function orderQty() {
+  return Math.max(1, Math.floor(Number(qtyInput.value) || 1));
 }
 
 // delta：帶正負號的口數（買進 +1、賣出 −1、平倉 −pos.qty）
 function trade(delta) {
   if (lastPrice == null || delta === 0) return;
   const price = lastPrice;
-  let pnl = 0;   // 此筆成交實現的損益（純加碼為 0）
+  const qty = Math.abs(delta);
+
+  // 成本：手續費（每口每邊）＋ 交易稅（合約值 × 稅率）
+  const fee = (Number(feeInput.value) || 0) * qty;
+  const tax = Math.round(price * pointValue * TAX_RATE) * qty;
+  const fillCost = fee + tax;
+  const costPerLot = fillCost / qty;
+  costs += fillCost;
+
+  let pnl = 0;          // 此筆「淨」實現損益（扣平倉＋對應開倉成本）
+  let isClose = false;
   if (pos.qty === 0 || Math.sign(pos.qty) === Math.sign(delta)) {
-    // 同方向加碼 → 重算加權均價
-    const newQty = pos.qty + delta;
-    pos.avg = (pos.avg * Math.abs(pos.qty) + price * Math.abs(delta)) / Math.abs(newQty);
+    // 同方向加碼 → 重算加權均價與每口開倉成本
+    const absOld = Math.abs(pos.qty), newQty = pos.qty + delta, absNew = Math.abs(newQty);
+    pos.avg = (pos.avg * absOld + price * qty) / absNew;
+    pos.openCostPerLot = (pos.openCostPerLot * absOld + costPerLot * qty) / absNew;
     pos.qty = newQty;
   } else {
-    // 反向 → 先就重疊部分實現損益，必要時反手
-    const closeQty = Math.min(Math.abs(delta), Math.abs(pos.qty));
-    pnl = (price - pos.avg) * Math.sign(pos.qty) * closeQty * pointValue;
-    realized += pnl;
+    // 反向 → 就重疊部分實現損益（淨額：毛 − 平倉成本 − 對應開倉成本），必要時反手
+    const closeQty = Math.min(qty, Math.abs(pos.qty));
+    isClose = true;
+    const gross = (price - pos.avg) * Math.sign(pos.qty) * closeQty * pointValue;
+    pnl = gross - costPerLot * closeQty - pos.openCostPerLot * closeQty;
+    realized += gross;   // realized 記毛；headline 用 realized - costs
     pos.qty += delta;
-    if (pos.qty === 0) pos.avg = 0;
-    else if (Math.sign(pos.qty) === Math.sign(delta)) pos.avg = price;  // 反手後新均價
+    if (pos.qty === 0) { pos.avg = 0; pos.openCostPerLot = 0; }
+    else if (Math.sign(pos.qty) === Math.sign(delta)) {
+      pos.avg = price; pos.openCostPerLot = costPerLot;   // 反手後新倉
+    }
   }
+
   const fill = { seq: fills.length + 1, time: lastTime,
-                 side: delta > 0 ? "買" : "賣", price, qty: Math.abs(delta), pnl };
+                 side: delta > 0 ? "買" : "賣", price, qty, pnl, cost: fillCost, isClose };
   fills.push(fill);
   prependLogRow(fill);
+  addMarker(fill);
   refreshPnl();
   refreshStats();
 }
 
 function flatten() { if (pos.qty !== 0) trade(-pos.qty); }
+
+// 觸價自動平倉（停損/停利以「距進場點數」設定）
+function checkAutoExit() {
+  if (pos.qty === 0 || lastPrice == null) return;
+  const dir = Math.sign(pos.qty);
+  const sl = Number(slInput.value), tp = Number(tpInput.value);
+  if (sl > 0) {
+    const stop = pos.avg - dir * sl;
+    if ((dir > 0 && lastPrice <= stop) || (dir < 0 && lastPrice >= stop)) {
+      flatten(); setStatus("觸發停損，已平倉"); return;
+    }
+  }
+  if (tp > 0) {
+    const target = pos.avg + dir * tp;
+    if ((dir > 0 && lastPrice >= target) || (dir < 0 && lastPrice <= target)) {
+      flatten(); setStatus("觸發停利，已平倉");
+    }
+  }
+}
+
+// 在 K 棒上標記進出場（買=紅上箭、賣=綠下箭）
+function addMarker(fill) {
+  markers.push({
+    time: fill.time - (fill.time % 60),
+    position: fill.side === "買" ? "belowBar" : "aboveBar",
+    color: fill.side === "買" ? "#ef5350" : "#26a69a",
+    shape: fill.side === "買" ? "arrowUp" : "arrowDown",
+    text: `${fill.side}${fill.qty}`,
+  });
+  markers.sort((a, b) => a.time - b.time);   // markers 需時間遞增
+  candleSeries.setMarkers(markers);
+}
 
 function fmtNT(v) {
   const s = Math.round(v).toLocaleString();
@@ -244,9 +327,12 @@ function refreshPnl() {
   }
   const upl = (lastPrice != null && pos.qty !== 0)
     ? (lastPrice - pos.avg) * pos.qty * pointValue : 0;
-  const tot = realized + upl;
+  const realizedNet = realized - costs;
+  const tot = realizedNet + upl;
   uplVal.textContent = fmtNT(upl); uplVal.className = pnlClass(upl);
-  rplVal.textContent = fmtNT(realized); rplVal.className = pnlClass(realized);
+  rplVal.textContent = fmtNT(realizedNet); rplVal.className = pnlClass(realizedNet);
+  costVal.textContent = costs ? "-" + Math.round(costs).toLocaleString() : "0";
+  costVal.className = costs ? "down" : "";
   totVal.textContent = fmtNT(tot); totVal.className = pnlClass(tot);
 }
 
@@ -261,7 +347,7 @@ function fmtTime(epoch) {
 // ---- 統計 ----
 // 一筆「交易」＝有實現損益的成交（純加碼不計）。回傳所有指標。
 function computeStats() {
-  const closed = fills.filter(f => f.pnl !== 0);
+  const closed = fills.filter(f => f.isClose);   // 有平倉的成交＝完成一筆交易（pnl 已是淨額）
   const wins = closed.filter(f => f.pnl > 0);
   const losses = closed.filter(f => f.pnl < 0);
   const sum = (arr) => arr.reduce((s, f) => s + f.pnl, 0);
@@ -288,7 +374,7 @@ function computeStats() {
     profitFactor: grossLoss < 0 ? grossWin / Math.abs(grossLoss)
                                 : (wins.length ? Infinity : null),
     maxDrawdown: maxDD, maxConsecLoss: maxStreak,
-    realized, unrealized: upl, total: realized + upl,
+    realized: realized - costs, costs, unrealized: upl, total: realized - costs + upl,
   };
 }
 
@@ -389,8 +475,8 @@ function prependLogRow(f) {
   logEmpty.style.display = "none";
   logTable.style.display = "";
   const tr = document.createElement("tr");
-  const pnlCell = f.pnl === 0 ? "—"
-    : `<span class="${pnlClass(f.pnl)}">${fmtNT(f.pnl)}</span>`;
+  const pnlCell = f.isClose
+    ? `<span class="${pnlClass(f.pnl)}">${fmtNT(f.pnl)}</span>` : "—";
   tr.innerHTML =
     `<td>${f.seq}</td><td>${fmtTime(f.time)}</td>` +
     `<td class="${f.side === "買" ? "act-b" : "act-s"}">${f.side}</td>` +
@@ -411,16 +497,16 @@ logToggle.onclick = () => {
   requestAnimationFrame(() => chart.resize(chartEl.clientWidth, chartEl.clientHeight));
 };
 
-buyBtn.onclick = () => trade(+1);
-sellBtn.onclick = () => trade(-1);
+buyBtn.onclick = () => trade(+orderQty());
+sellBtn.onclick = () => trade(-orderQty());
 flatBtn.onclick = () => flatten();
 
 // 鍵盤：B 買、S 賣、F 平倉、空白鍵 播放/暫停
 document.addEventListener("keydown", (e) => {
   if (e.target.tagName === "SELECT" || e.target.tagName === "INPUT") return;
   const k = e.key.toLowerCase();
-  if (k === "b") trade(+1);
-  else if (k === "s") trade(-1);
+  if (k === "b") trade(+orderQty());
+  else if (k === "s") trade(-orderQty());
   else if (k === "f") flatten();
   else if (e.code === "Space") { e.preventDefault(); playBtn.click(); }
 });
@@ -445,6 +531,54 @@ productSel.onchange = () => {
   startReplay(productSel.value, dateSel.value);
 };
 dateSel.onchange = () => startReplay(productSel.value, dateSel.value);
+
+// ---- 隨機盲測 / 指定起始時間 ----
+function applyBlind() {
+  dateSel.style.display = blind ? "none" : "";
+  blindLabel.style.display = blind ? "" : "none";
+}
+blindChk.onchange = () => { blind = blindChk.checked; applyBlind(); };
+
+randomBtn.onclick = () => {
+  const dates = datesByProduct[productSel.value] || [];
+  if (!dates.length) return;
+  // 隨機練習自動進入盲測：隱藏日期，避免看到是哪天
+  blind = true;
+  blindChk.checked = true;
+  applyBlind();
+  const d = dates[Math.floor(Math.random() * dates.length)];
+  dateSel.value = d;
+  startReplay(productSel.value, d);
+};
+
+// 載入起始時間「之前」的 1 分 K 當靜態背景
+async function loadHistoryBefore(product, date, epoch) {
+  let bars = [];
+  try { bars = await (await fetch(`/api/bars/${product}/${date}`)).json(); }
+  catch (e) { return; }
+  const prior = bars.filter(b => b.time < epoch);
+  if (!prior.length) return;
+  candleSeries.setData(prior.map(b => ({
+    time: b.time, open: b.open, high: b.high, low: b.low, close: b.close })));
+  volumeSeries.setData(prior.map(b => ({
+    time: b.time, value: b.volume,
+    color: b.close >= b.open ? "#ef535055" : "#26a69a55" })));
+  curBar = null;                      // 之後的 live tick 從起始時間開新棒
+  lastPrice = prior[prior.length - 1].close;   // 現價先顯示前段收盤
+  refreshPnl();
+}
+
+startAtBtn.onclick = () => {
+  if (!curProduct || !curDate || !startTime.value) return;
+  const [hh, mm] = startTime.value.split(":").map(Number);
+  const [Y, Mo, D] = curDate.split("-").map(Number);
+  // 牆鐘當 UTC，與 K 棒 time 一致
+  const epoch = Math.floor(Date.UTC(Y, Mo - 1, D, hh, mm, 0) / 1000);
+  historyBeforeEpoch = epoch;         // 先畫此時間之前的歷史
+  pendingSeekTime = epoch;            // 再從此時間開始逐筆
+  pendingPlay = true;
+  startReplay(curProduct, curDate);   // 重連並清空
+};
 
 // ---- 初始化：載入可回放交易日 ----
 fetch("/api/dates").then(r => r.json()).then(list => {

@@ -54,6 +54,16 @@ def test_seek_then_play():
     assert asyncio.run(scenario()) == [102, 103]
 
 
+def test_seek_time_then_play():
+    async def scenario():
+        eng = _engine()
+        eng.seek_time(M1)          # 跳到第 1 分鐘起點
+        eng.play()
+        return [t["price"] async for t in eng.stream()]
+
+    assert asyncio.run(scenario()) == [102, 103]
+
+
 def test_on_event_callback_fires():
     seen = []
 
