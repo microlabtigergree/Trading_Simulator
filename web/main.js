@@ -211,6 +211,7 @@ let lastTime = null;
 let pos = { qty: 0, avg: 0, openCostPerLot: 0 };   // qty>0 多單、<0 空單；avg 進場均價；每口開倉成本
 let realized = 0;               // 已實現損益（毛，NT$）
 let costs = 0;                  // 累計手續費＋交易稅
+let stopPrice = 0;              // 已「提交」的停損價（打完 Enter/失焦才生效）
 let fills = [];                 // 每筆成交紀錄
 let markers = [];               // 圖上進出場標記
 
@@ -220,6 +221,7 @@ function resetTrades() {
   pos = { qty: 0, avg: 0, openCostPerLot: 0 };
   realized = 0;
   costs = 0;
+  clearStop();
   fills = [];
   markers = [];
   candleSeries.setMarkers([]);
@@ -261,9 +263,9 @@ function trade(delta) {
     pnl = gross - costPerLot * closeQty - pos.openCostPerLot * closeQty;
     realized += gross;   // realized 記毛；headline 用 realized - costs
     pos.qty += delta;
-    if (pos.qty === 0) { pos.avg = 0; pos.openCostPerLot = 0; }
+    if (pos.qty === 0) { pos.avg = 0; pos.openCostPerLot = 0; clearStop(); }
     else if (Math.sign(pos.qty) === Math.sign(delta)) {
-      pos.avg = price; pos.openCostPerLot = costPerLot;   // 反手後新倉
+      pos.avg = price; pos.openCostPerLot = costPerLot; clearStop();   // 反手後新倉，舊停損作廢
     }
   }
 
@@ -278,13 +280,15 @@ function trade(delta) {
 
 function flatten() { if (pos.qty !== 0) trade(-pos.qty); }
 
-// 觸價自動平倉（直接輸入停損價）
+// 停損價打完（Enter/失焦）才提交，避免輸入中途被當成停損價誤觸發
+function clearStop() { stopPrice = 0; slInput.value = ""; }
+slInput.onchange = () => { stopPrice = Number(slInput.value) || 0; };
+
+// 觸價自動平倉（用已提交的停損價）
 function checkAutoExit() {
-  if (pos.qty === 0 || lastPrice == null) return;
-  const stop = Number(slInput.value);
-  if (!(stop > 0)) return;
+  if (pos.qty === 0 || lastPrice == null || !(stopPrice > 0)) return;
   const dir = Math.sign(pos.qty);   // 多單跌破停損價、空單漲破停損價 → 平倉
-  if ((dir > 0 && lastPrice <= stop) || (dir < 0 && lastPrice >= stop)) {
+  if ((dir > 0 && lastPrice <= stopPrice) || (dir < 0 && lastPrice >= stopPrice)) {
     flatten(); setStatus("觸發停損，已平倉");
   }
 }
